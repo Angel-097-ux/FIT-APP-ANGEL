@@ -8,6 +8,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FIT21">
 <title>FIT21 — Desafío de Fuerza</title>
+
+<!-- SVG Favicon / App Icon -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0a'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial Black,sans-serif' font-weight='900' font-size='28' fill='%23e8ff00'%3EFIT%3C/text%3E%3Ctext x='50%25' y='82%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial Black,sans-serif' font-weight='900' font-size='16' fill='%23ffffff'%3E21%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230a0a0a'/%3E%3Ctext x='50%25' y='48%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial Black,sans-serif' font-weight='900' font-size='72' fill='%23e8ff00'%3EFIT%3C/text%3E%3Ctext x='50%25' y='80%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial Black,sans-serif' font-weight='900' font-size='44' fill='%23ffffff'%3E21%3C/text%3E%3C/svg%3E">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -333,6 +338,15 @@ body { display: flex; flex-direction: column; }
 .prep-icon { font-size: 56px; }
 .prep-countdown { font-family: 'Barlow Condensed', sans-serif; font-size: 120px; font-weight: 900; color: var(--accent); line-height: 1; letter-spacing: -4px; }
 .prep-tip { font-size: 13px; color: var(--text2); text-align: center; padding: 0 28px; line-height: 1.5; max-width: 320px; }
+/* Skip button inside prep overlay */
+.prep-skip-btn {
+  margin-top: 8px; padding: 10px 28px;
+  background: transparent; border: 1px solid var(--border); border-radius: var(--r);
+  color: var(--text3); font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+  cursor: pointer; transition: border-color .2s;
+}
+.prep-skip-btn:hover { border-color: var(--text2); color: var(--text2); }
 
 /* ─── TECHNIQUE MODAL ─── */
 .tech-modal {
@@ -685,12 +699,16 @@ body { display: flex; flex-direction: column; }
 </div>
 
 <!-- EXERCISE PREP COUNTDOWN OVERLAY -->
+<!-- ✅ FIX: removed markExDone from here. Countdown is purely visual/motivacional.
+     A "Saltear" button lets users dismiss early. After countdown, overlay closes
+     and the exercise card opens so the user can log sets manually. -->
 <div class="prep-overlay" id="prep-overlay">
   <div class="prep-label">Preparate para</div>
   <div class="prep-icon" id="prep-icon">🏋️</div>
   <div class="prep-ex-name" id="prep-ex-name">—</div>
   <div class="prep-countdown" id="prep-countdown">5</div>
   <div class="prep-tip" id="prep-tip-text">Foco total. Posición inicial.</div>
+  <button class="prep-skip-btn" id="prep-skip-btn" onclick="skipPrepCountdown()">Saltear</button>
 </div>
 
 <!-- TECHNIQUE MODAL -->
@@ -1282,7 +1300,13 @@ function renderHome(){
     btn.className = 'start-btn';
   }
   document.getElementById('today-card').onclick = openTodayWorkout;
+}
 
+// ══════════════════════════════════════════════
+//  WEEK STRIP
+// ══════════════════════════════════════════════
+function renderWeekStrip(){
+  const cur = getCurrentDay();
   const strip = document.getElementById('week-strip');
   strip.innerHTML = '';
   PLAN.forEach(d=>{
@@ -1605,23 +1629,6 @@ function toggleSet(exId, si){
   if(fb && allEx && !S.completedDays.includes(d.day)){ fb.classList.add('ready'); }
 }
 
-function markExDone(exId, dayNum){
-  const d = PLAN.find(p=>p.day==dayNum);
-  if(!d) return;
-  const ex = d.exercises.find(e=>e.id===exId);
-  if(!ex) return;
-  if(!S.setLogs[exId]) S.setLogs[exId] = [];
-  S.setLogs[exId].forEach(s=>{ s.done=true; if(!s.reps)s.reps=ex.reps; });
-  ex._open = false;
-  save();
-  computeTotals();
-  renderExCards(d);
-  updateWorkoutProgress(d,d.exercises);
-  const allEx = d.exercises.every(ex=>(S.setLogs[ex.id]||[]).some(s=>s.done));
-  const fb = document.getElementById('finish-btn');
-  if(fb && allEx && !S.completedDays.includes(d.day)){ fb.classList.add('ready'); }
-}
-
 function updateWorkoutProgress(d, exArr){
   const fill = document.getElementById('wk-prog-fill');
   if(!fill) return;
@@ -1630,9 +1637,20 @@ function updateWorkoutProgress(d, exArr){
   fill.style.width = (done/exArr.length*100)+'%';
 }
 
-// ── EXERCISE PREP COUNTDOWN ──
+// ══════════════════════════════════════════════
+//  EXERCISE PREP COUNTDOWN
+//  ✅ FIX: Only shows a motivational countdown. Does NOT auto-complete the exercise.
+//  After countdown ends (or user skips), the overlay closes and the exercise card
+//  opens so the user can log their sets and mark them done manually.
+// ══════════════════════════════════════════════
 let prepInterval = null;
+let _prepExId = null;
+let _prepDayNum = null;
+
 function startExerciseCountdown(exId, dayNum, exName, exIcon, exTip){
+  _prepExId = exId;
+  _prepDayNum = dayNum;
+
   const overlay = document.getElementById('prep-overlay');
   document.getElementById('prep-icon').textContent = exIcon || '🏋️';
   document.getElementById('prep-ex-name').textContent = exName;
@@ -1642,7 +1660,6 @@ function startExerciseCountdown(exId, dayNum, exName, exIcon, exTip){
   let count = 5;
   document.getElementById('prep-countdown').textContent = count;
 
-  // Speak countdown
   speakText('Preparate. ' + exName + '. Comienza en ' + count);
 
   clearInterval(prepInterval);
@@ -1653,12 +1670,39 @@ function startExerciseCountdown(exId, dayNum, exName, exIcon, exTip){
     if(count <= 0){
       clearInterval(prepInterval);
       setTimeout(()=>{
-        overlay.classList.remove('show');
-        markExDone(exId, dayNum);
-        speakText('¡Excelente! Completaste el ejercicio.');
-      }, 800);
+        // ✅ Just close overlay and open the exercise card — don't mark as done
+        closePrepOverlay();
+      }, 700);
     }
   }, 1000);
+}
+
+function skipPrepCountdown(){
+  clearInterval(prepInterval);
+  closePrepOverlay();
+}
+
+function closePrepOverlay(){
+  document.getElementById('prep-overlay').classList.remove('show');
+  stopSpeaking();
+  // Open the exercise card panel so user can log their sets
+  if(_prepExId){
+    const d = PLAN.find(p=>p.exercises && p.exercises.find(e=>e.id===_prepExId));
+    if(d){
+      const ex = d.exercises.find(e=>e.id===_prepExId);
+      if(ex){
+        ex._open = true;
+        renderExCards(d);
+        // Scroll the card into view
+        setTimeout(()=>{
+          const card = document.getElementById('ex-card-'+_prepExId);
+          if(card) card.scrollIntoView({behavior:'smooth', block:'center'});
+        }, 100);
+      }
+    }
+    _prepExId = null;
+    _prepDayNum = null;
+  }
 }
 
 // ── REST TIMER ──
@@ -1743,8 +1787,6 @@ function closeComplete(){
 //  TECHNIQUE MODAL
 // ══════════════════════════════════════════════
 let techAnimInterval = null;
-let techAnimPhase = 0;
-let techAnimProgress = 0;
 let currentTechKey = null;
 let isSpeaking = false;
 
@@ -1797,13 +1839,10 @@ function startTechAnimation(techKey){
 function drawExerciseAnimation(ctx, w, h, t, techKey){
   ctx.clearRect(0,0,w,h);
   const cx = w/2, cy = h*0.45;
-  const phase = t / (Math.PI*2); // 0 to 1
 
-  // Background
   ctx.fillStyle = 'rgba(26,26,26,0.5)';
   ctx.fillRect(0,0,w,h);
 
-  // Ground line
   ctx.strokeStyle = '#333';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1815,7 +1854,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
   const bodyColor = '#f0f0f0';
   const jointColor = '#4fc3f7';
 
-  // Squash animation value (0=up, 1=down)
   let sq = Math.sin(t) * 0.5 + 0.5;
   if(sq < 0) sq = 0;
   if(sq > 1) sq = 1;
@@ -1825,11 +1863,9 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
   const groundY = h - 20;
 
   if(techKey === 'squat' || techKey === 'squatjump'){
-    // Squat animation
-    const kneeAngle = sq * 0.9; // 0 = standing, 0.9 = deep squat
+    const kneeAngle = sq * 0.9;
     const torsoLean = sq * 0.15;
 
-    // Figure position
     const ankleY = groundY;
     const ankleX = cx;
     const kneeY = ankleY - legH * Math.cos(kneeAngle * 1.2);
@@ -1842,7 +1878,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
 
     drawStickFigure(ctx, {ankleX,ankleY,kneeX,kneeY,hipX,hipY,shoulderX,shoulderY,headY,headX:shoulderX}, accentColor, bodyColor, jointColor, sq);
 
-    // Depth indicator
     if(sq > 0.6){
       ctx.strokeStyle = accentColor;
       ctx.lineWidth = 1;
@@ -1874,7 +1909,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const shoulderY = hipY - bodyH*0.85;
     const headY = shoulderY - 20;
 
-    // Back leg
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
@@ -1884,7 +1918,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(hipX, hipY);
     ctx.stroke();
 
-    // Front leg
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -1893,7 +1926,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(hipX, hipY);
     ctx.stroke();
 
-    // Torso
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -1901,13 +1933,11 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(shoulderX, shoulderY);
     ctx.stroke();
 
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(shoulderX, headY, 12, 0, Math.PI*2);
     ctx.fill();
 
-    // Arms
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -1919,7 +1949,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(shoulderX+20, shoulderY+35);
     ctx.stroke();
 
-    // Joints
     [bKneeX, fKneeX, hipX, shoulderX].forEach((jx,ji)=>{
       const jy = [bKneeY, fKneeY, hipY, shoulderY][ji];
       ctx.fillStyle = jointColor;
@@ -1936,7 +1965,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const kneeY = ankleY - legH * 1.1;
     const hipX = ankleX - Math.sin(hipHinge)*20;
     const hipY = kneeY - 5 + sq*30;
-    const torsoAngle = -hipHinge;
     const shoulderX = hipX - Math.sin(hipHinge)*bodyH*0.9;
     const shoulderY = hipY - Math.cos(hipHinge)*bodyH*0.9;
     const headX = shoulderX - Math.sin(hipHinge)*18;
@@ -1945,7 +1973,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
-    // Legs
     ctx.beginPath();
     ctx.moveTo(ankleX-12,ankleY);
     ctx.lineTo(ankleX-12,kneeY);
@@ -1957,7 +1984,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(hipX,hipY);
     ctx.stroke();
 
-    // Torso (neutral spine indicator)
     const spineColor = sq > 0.7 ? '#ff3d3d' : accentColor;
     ctx.strokeStyle = spineColor;
     ctx.lineWidth = 5;
@@ -1966,13 +1992,11 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(shoulderX, shoulderY);
     ctx.stroke();
 
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(headX, headY, 12, 0, Math.PI*2);
     ctx.fill();
 
-    // Dumbbell weights
     const dbX = shoulderX - Math.sin(hipHinge)*30;
     const dbY = shoulderY - Math.cos(hipHinge)*30 + 50;
     ctx.fillStyle = '#555';
@@ -1981,20 +2005,16 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.fillRect(dbX-22, dbY-8, 6, 16);
     ctx.fillRect(dbX+16, dbY-8, 6, 16);
 
-    // Spine label
     if(sq > 0.7){
       ctx.fillStyle = '#ff3d3d';
       ctx.font = 'bold 10px Barlow Condensed';
       ctx.fillText('¡Espalda neutral!', shoulderX+8, shoulderY);
     }
 
-    // Joint dots
-    [kneeY].forEach(ky=>{
-      ctx.fillStyle = jointColor;
-      ctx.beginPath();
-      ctx.arc(ankleX, ky, 5, 0, Math.PI*2);
-      ctx.fill();
-    });
+    ctx.fillStyle = jointColor;
+    ctx.beginPath();
+    ctx.arc(ankleX, kneeY, 5, 0, Math.PI*2);
+    ctx.fill();
 
   } else if(techKey === 'hipthrust'){
     const thrust = sq;
@@ -2007,11 +2027,9 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const shoulderX = hipX - 60;
     const shoulderY = groundY - 25;
 
-    // Bench
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(shoulderX-30, groundY-30, 70, 12);
 
-    // Legs
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
@@ -2021,26 +2039,22 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(hipX, hipY);
     ctx.stroke();
 
-    // Torso
     ctx.beginPath();
     ctx.moveTo(hipX, hipY);
     ctx.lineTo(shoulderX, shoulderY);
     ctx.stroke();
 
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(shoulderX-12, shoulderY-14, 12, 0, Math.PI*2);
     ctx.fill();
 
-    // Dumbbell on hips
     ctx.fillStyle = '#555';
     ctx.fillRect(hipX-25, hipY-8, 50, 14);
     ctx.fillStyle = '#777';
     ctx.fillRect(hipX-32, hipY-12, 8, 22);
     ctx.fillRect(hipX+24, hipY-12, 8, 22);
 
-    // Joints
     [[hipX,hipY],[kneeX,kneeY]].forEach(([jx,jy])=>{
       ctx.fillStyle = jointColor;
       ctx.beginPath();
@@ -2065,12 +2079,10 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
-    // Legs
     ctx.beginPath();
     ctx.moveTo(aX,aY);
     ctx.lineTo(hX,hY);
     ctx.stroke();
-    // Torso
     const lineColor = Math.abs(wobble) > 1.5 ? '#ff3d3d' : accentColor;
     ctx.strokeStyle = lineColor;
     ctx.beginPath();
@@ -2082,12 +2094,10 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.moveTo(sX,sY);
     ctx.lineTo(elbX,elbY);
     ctx.stroke();
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(headX,headY,12,0,Math.PI*2);
     ctx.fill();
-    // Arm lines on floor
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 6;
     ctx.beginPath();
@@ -2095,7 +2105,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(elbX-25,elbY+8);
     ctx.stroke();
 
-    // Alignment line
     ctx.strokeStyle = Math.abs(wobble) > 1.5 ? '#ff3d3d44' : '#e8ff0022';
     ctx.lineWidth = 20;
     ctx.beginPath();
@@ -2116,7 +2125,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const handX = cx+60 - pull*70;
     const handY = sY + 30 - pull*15;
 
-    // Support knee/hand
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -2124,7 +2132,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(kneeX,kneeY);
     ctx.stroke();
 
-    // Body
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -2133,7 +2140,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(sX,sY);
     ctx.stroke();
 
-    // Row arm
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -2142,7 +2148,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(handX,handY);
     ctx.stroke();
 
-    // Other arm support
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -2150,14 +2155,12 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(cx-60,groundY-10);
     ctx.stroke();
 
-    // Dumbbell
     ctx.fillStyle = '#555';
     ctx.fillRect(handX-12,handY-5,24,10);
     ctx.fillStyle = '#777';
     ctx.fillRect(handX-16,handY-8,5,16);
     ctx.fillRect(handX+11,handY-8,5,16);
 
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(headX,headY,12,0,Math.PI*2);
@@ -2171,21 +2174,16 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     });
 
   } else if(techKey === 'burpee'){
-    // Multi-phase burpee
     const phase4 = t / (Math.PI*2);
     if(phase4 < 0.2){
-      // Standing → squat
       const sq2 = phase4/0.2;
       const hipY2 = groundY - 60 - 40*(1-sq2);
       drawSimpleStand(ctx,cx,hipY2,groundY,bodyColor,accentColor,jointColor);
     } else if(phase4 < 0.5){
-      // Plank
       drawSimplePlank(ctx,cx,groundY,bodyColor,accentColor);
     } else if(phase4 < 0.7){
-      // Push-up low
       drawSimplePlank(ctx,cx,groundY+12,bodyColor,'#ff4d00');
     } else if(phase4 < 0.85){
-      // Jump
       const jump = (phase4-0.7)/0.15;
       const jOff = -Math.sin(jump*Math.PI)*40;
       drawSimpleStand(ctx,cx,groundY-60+jOff,groundY+jOff,bodyColor,accentColor,jointColor);
@@ -2204,7 +2202,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const handY = elbY - curl*70;
     const handX = elbX + curl*10;
 
-    // Body static
     ctx.strokeStyle = bodyColor; ctx.lineWidth = 5; ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(ankleX-12,ankleY);
@@ -2218,7 +2215,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(cx,hipY);
     ctx.stroke();
 
-    // Arm
     ctx.strokeStyle = accentColor; ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(cx+15,sY+15);
@@ -2226,7 +2222,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(handX+35,handY);
     ctx.stroke();
 
-    // Other arm
     ctx.strokeStyle = '#555';
     ctx.beginPath();
     ctx.moveTo(cx-15,sY+15);
@@ -2234,20 +2229,17 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(cx-35,elbY+60*(1-curl*0.8));
     ctx.stroke();
 
-    // Dumbbell
     ctx.fillStyle = '#555';
     ctx.fillRect(handX+22,handY-4,24,8);
     ctx.fillStyle = '#777';
     ctx.fillRect(handX+18,handY-7,5,14);
     ctx.fillRect(handX+44,handY-7,5,14);
 
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(cx,sY-14,12,0,Math.PI*2);
     ctx.fill();
 
-    // Elbow fixed indicator
     ctx.strokeStyle = '#e8ff0055';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -2257,23 +2249,18 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
   } else if(techKey === 'chestpress'){
     const press = sq;
     const bodyY = groundY - 40;
-    // Bench person lying down
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(cx-90,bodyY-12,180,14);
 
-    // Body
     ctx.strokeStyle = bodyColor; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    // Torso (horizontal)
     ctx.beginPath();
     ctx.moveTo(cx-70,bodyY);
     ctx.lineTo(cx+50,bodyY);
     ctx.stroke();
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(cx+62,bodyY,12,0,Math.PI*2);
     ctx.fill();
-    // Legs
     ctx.beginPath();
     ctx.moveTo(cx-70,bodyY);
     ctx.lineTo(cx-70,groundY-5);
@@ -2281,19 +2268,16 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.stroke();
 
     const armDown = 35 - press*40;
-    // Right arm
     ctx.strokeStyle = accentColor; ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(cx+20,bodyY-5);
     ctx.lineTo(cx+40,bodyY+armDown);
     ctx.stroke();
-    // Left arm
     ctx.beginPath();
     ctx.moveTo(cx-20,bodyY-5);
     ctx.lineTo(cx-40,bodyY+armDown);
     ctx.stroke();
 
-    // Dumbbells
     const dbY = bodyY+armDown;
     ctx.fillStyle = '#555';
     ctx.fillRect(cx+28,dbY-4,20,8);
@@ -2315,32 +2299,24 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     const ankleX = cx, ankleY = groundY;
     const hipY = groundY - 100;
     const sY = groundY - 155;
-    const armExtend = press;
-    const handY = sY - armExtend * 80;
+    const handY = sY - press * 80;
 
     ctx.strokeStyle = bodyColor; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    // Legs
     ctx.beginPath();
     ctx.moveTo(ankleX-14,ankleY);
     ctx.lineTo(ankleX-14,hipY+20);
     ctx.lineTo(cx,hipY);
+    ctx.lineTo(cx,sY);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(ankleX+14,ankleY);
     ctx.lineTo(ankleX+14,hipY+20);
     ctx.lineTo(cx,hipY);
     ctx.stroke();
-    // Torso
-    ctx.beginPath();
-    ctx.moveTo(cx,hipY);
-    ctx.lineTo(cx,sY);
-    ctx.stroke();
-    // Head
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(cx,sY-14,12,0,Math.PI*2);
     ctx.fill();
-    // Arms
     ctx.strokeStyle = accentColor; ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(cx-15,sY+10);
@@ -2352,7 +2328,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.lineTo(cx+20,sY+25-press*10);
     ctx.lineTo(cx+20,handY);
     ctx.stroke();
-    // Dumbbells
     ctx.fillStyle = '#555';
     ctx.fillRect(cx-32,handY-4,14,8);
     ctx.fillRect(cx+18,handY-4,14,8);
@@ -2363,13 +2338,11 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
     ctx.fillRect(cx+30,handY-7,4,14);
 
   } else {
-    // Generic stick figure
     const sq2 = sq;
     const hipY2 = groundY - 70 - sq2*30;
     drawSimpleStand(ctx,cx,hipY2,groundY,bodyColor,accentColor,jointColor);
   }
 
-  // Phase indicator
   const progress = t / (Math.PI*2);
   ctx.fillStyle = 'rgba(232,255,0,0.15)';
   ctx.fillRect(0, h-6, w*progress, 6);
@@ -2380,7 +2353,6 @@ function drawExerciseAnimation(ctx, w, h, t, techKey){
 function drawStickFigure(ctx, pts, accent, body, joint, sq){
   const {ankleX,ankleY,kneeX,kneeY,hipX,hipY,shoulderX,shoulderY,headY,headX} = pts;
   ctx.strokeStyle = body; ctx.lineWidth = 5; ctx.lineCap = 'round';
-  // Legs
   ctx.beginPath();
   ctx.moveTo(ankleX-12,ankleY);
   ctx.lineTo(kneeX-12,kneeY);
@@ -2391,18 +2363,15 @@ function drawStickFigure(ctx, pts, accent, body, joint, sq){
   ctx.lineTo(kneeX+12,kneeY);
   ctx.lineTo(hipX,hipY);
   ctx.stroke();
-  // Torso
   ctx.strokeStyle = accent; ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(hipX,hipY);
   ctx.lineTo(shoulderX,shoulderY);
   ctx.stroke();
-  // Head
   ctx.fillStyle = body;
   ctx.beginPath();
   ctx.arc(headX||shoulderX, headY, 14, 0, Math.PI*2);
   ctx.fill();
-  // Arms
   ctx.strokeStyle = '#888'; ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(shoulderX-12,shoulderY+5);
@@ -2412,7 +2381,6 @@ function drawStickFigure(ctx, pts, accent, body, joint, sq){
   ctx.moveTo(shoulderX+12,shoulderY+5);
   ctx.lineTo(shoulderX+20-sq*10,shoulderY+30+sq*5);
   ctx.stroke();
-  // Joints
   [[kneeX,kneeY],[hipX,hipY],[shoulderX,shoulderY]].forEach(([jx,jy])=>{
     ctx.fillStyle = joint;
     ctx.beginPath();
@@ -2487,7 +2455,6 @@ function speakText(text){
   u.rate = 0.95;
   u.pitch = 1.05;
   u.volume = 1;
-  // Pick a Spanish voice if available
   const voices = window.speechSynthesis.getVoices();
   const esVoice = voices.find(v=>v.lang.startsWith('es'));
   if(esVoice) u.voice = esVoice;
@@ -2663,15 +2630,20 @@ function renderProgress(){
 // ══════════════════════════════════════════════
 load();
 
-// Load voices async
 if('speechSynthesis' in window){
   window.speechSynthesis.onvoiceschanged = ()=>{ window.speechSynthesis.getVoices(); };
 }
 
+// Patch renderHome to also render week strip
+const _origRenderHome = renderHome;
+renderHome = function(){
+  _origRenderHome();
+  renderWeekStrip();
+};
+
 setTimeout(()=>{
   document.getElementById('splash').classList.add('hidden');
   renderHome();
-  // Show PAR-Q if not done yet
   if(!S.parqDone){
     setTimeout(showParq, 800);
   }

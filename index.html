@@ -601,7 +601,7 @@ body { display: flex; flex-direction: column; }
       <div class="section-head" style="padding:0 0 10px"><h2>Logros</h2></div>
       <div id="achievements-list"></div>
     </div>
-    <div class="history-section">
+    <div style="padding:0 16px 16px"><button onclick="if(confirm('¿Resetear TODO el progreso? Esta acción no se puede deshacer.')){localStorage.removeItem('fit21_v3');location.reload();}" style="width:100%;padding:14px;background:transparent;border:1px solid var(--red,#ff3d3d);border-radius:6px;color:#ff3d3d;font-family:Barlow Condensed,sans-serif;font-size:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer">🗑 Resetear progreso completo</button></div><div class="history-section">
       <div class="section-head" style="padding:0 0 10px"><h2>Historial</h2></div>
       <div id="history-list"></div>
     </div>

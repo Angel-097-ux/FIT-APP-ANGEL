@@ -1673,7 +1673,7 @@ function startExerciseCountdown(exId, dayNum, exName, exIcon, exTip){
       setTimeout(()=>{
         // ✅ Just close overlay and open the exercise card — don't mark as done
         closePrepOverlay();
-      }, 700);
+      openTechModal(PLAN.find(p=>p.exercises&&p.exercises.find(e=>e.id===_prepExId))?.exercises?.find(e=>e.id===_prepExId)?.techKey||'squat', document.getElementById('prep-ex-name').textContent); }, 700);
     }
   }, 1000);
 }
